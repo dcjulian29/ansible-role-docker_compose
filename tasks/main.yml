@@ -1,0 +1,137 @@
+---
+- name: Check current docker-compose version
+  ansible.builtin.command: "{{ docker_compose_path }} --version"
+  register: dc_vsn
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Set docker-compose version if installed
+  ansible.builtin.set_fact:
+    docker_compose_current_version: >
+      "{{ dc_vsn.stdout | regex_search('(\d+(\.\d+)+)') }}"
+  when: dc_vsn.stdout is defined and (dc_vsn.stdout | length > 0)
+
+- name: Remove existing docker-compose version if it's different
+  ansible.builtin.file:
+    path: "{{ docker_compose_path }}"
+    state: absent
+  when: >
+    docker_compose_current_version is defined
+    and docker_compose_version not in docker_compose_current_version
+
+- name: Ensure Docker Compose is installed
+  ansible.builtin.get_url:
+    url: "{{ docker_compose_url }}"
+    dest: "{{ docker_compose_path }}"
+    mode: "0755"
+  when: >
+    (docker_compose_current_version is not defined)
+    or (docker_compose_current_version | length == 0)
+    or docker_compose_version not in docker_compose_current_version
+
+- name: Ensure docker compose folders exists
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: root
+    group: docker
+    mode: "0750"
+    state: directory
+  with_items:
+    - "{{ docker_compose_base_dir }}"
+    - "{{ docker_compose_config_dir }}"
+    - "{{ docker_compose_volume_dir }}"
+
+- name: Ensure docker compose configuration folder exists
+  ansible.builtin.file:
+    path: "{{ docker_compose_config_dir }}/{{ item.name }}"
+    owner: root
+    group: docker
+    mode: "0750"
+    state: directory
+  with_items: "{{ docker_compose_services }}"
+
+- name: Ensure docker compose services are configured
+  ansible.builtin.copy:
+    content: >
+      ---
+      version: '3.8'
+
+      services:
+        {{ item.services | to_yaml(indent=2, default_flow_style=False) | indent(2) }}
+      {% if item.networks is defined and item.networks | length > 0 %}
+
+      networks:
+        {{ item.networks | to_yaml(indent=2, default_flow_style=False) | indent(2) }}
+      {% endif %}{% if item.volumes is defined and item.volumes | length > 0 %}
+
+      volumes:
+        {{ item.volumes | to_yaml(indent=2, default_flow_style=False) | indent(2) }}
+      {% endif %}{% if item.configs is defined and item.configs | length > 0 %}
+
+      configs:
+        {{ item.configs | to_yaml(indent=2, default_flow_style=False) | indent(2) }}
+      {% endif %}{% if item.secrets is defined and item.secrets | length > 0 %}
+
+      secrets:
+        {{ item.secrets | to_yaml(indent=2, default_flow_style=False) | indent(2) }}
+      {% endif %}
+    dest: "{{ docker_compose_config_dir }}/{{ item.name }}/docker-compose.yml"
+    group: docker
+    mode: "0640"
+    owner: root
+  register: __services
+  notify: Restart Docker Compose services
+  with_items: "{{ docker_compose_services }}"
+
+- name: Ensure docker compose environments are configured
+  ansible.builtin.copy:
+    content: >
+      {% for env in item.environment %}
+      {% if item.environment is not mapping %}
+      {{ env }}
+      {% else %}
+      {{ env }}={{ item.environment[env] }}
+      {% endif %}
+      {% endfor %}
+    dest: "{{ docker_compose_config_dir }}/{{ item.name }}/.env"
+    group: docker
+    mode: "0640"
+    owner: root
+  register: __environs
+  notify: Restart Docker Compose environments
+  with_items: "{{ docker_compose_services }}"
+  when:
+    - item.environment is defined
+    - item.environment | length > 0
+
+- name: Ensure docker compose systemd service configured
+  ansible.builtin.copy:
+    content: >
+      [Unit]
+      Description=Docker Compose Application Service - {{ item.name }}
+      Requires=docker.service
+      After=docker.service
+      StartLimitIntervalSec=60
+
+      [Service]
+      WorkingDirectory={{ docker_compose_config_dir }}/{{ item.name }}
+      ExecStart=/usr/local/bin/docker-compose up
+      ExecStop=/usr/local/bin/docker-compose down
+      TimeoutStartSec=0
+      Restart=on-failure
+      StartLimitBurst=3
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: "/lib/systemd/system/docker-compose-{{ item.name }}.service"
+    group: root
+    mode: "0640"
+    owner: root
+  with_items: "{{ docker_compose_services }}"
+  notify:
+    - Reload SystemD
+    - Enable Docker Compose services
+
+- name: Ensure all handlers run before continuing
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,22 @@
+---
+- name: Reload SystemD
+  ansible.builtin.systemd:
+    daemon-reload: true
+
+- name: Enable Docker Compose services
+  loop: "{{ __services.results | selectattr('changed', 'equalto', true) | map(attribute='item') }}"
+  ansible.builtin.systemd:
+    name: "docker-compose-{{ item.name }}.service"
+    enabled: true
+
+- name: Restart Docker Compose environments
+  loop: "{{ __environs.results | selectattr('changed', 'equalto', true) | map(attribute='item') }}"
+  ansible.builtin.service:
+    name: 'docker-compose-{{ item.name }}.service'
+    state: restarted
+
+- name: Restart Docker Compose services
+  loop: "{{ __services.results | selectattr('changed', 'equalto', true) | map(attribute='item') }}"
+  ansible.builtin.service:
+    name: "docker-compose-{{ item.name }}.service"
+    state: restarted
