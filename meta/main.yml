@@ -6,7 +6,7 @@ galaxy_info:
   description: Ansible role to install Docker Compose and related utilities to manage services
   galaxy_tags:
     - docker
-    - docker_compose
+    - compose
     - container
     - services
     - devops
