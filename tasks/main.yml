@@ -53,7 +53,7 @@
 
 - name: Ensure docker compose services are configured
   ansible.builtin.copy:
-    content: >
+    content: |
       ---
       version: '3.8'
 
@@ -86,7 +86,7 @@
 
 - name: Ensure docker compose environments are configured
   ansible.builtin.copy:
-    content: >
+    content: |
       {% for env in item.environment %}
       {% if item.environment is not mapping %}
       {{ env }}
@@ -107,7 +107,7 @@
 
 - name: Ensure docker compose systemd service configured
   ansible.builtin.copy:
-    content: >
+    content: |
       [Unit]
       Description=Docker Compose Application Service - {{ item.name }}
       Requires=docker.service
