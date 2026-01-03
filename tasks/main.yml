@@ -99,7 +99,7 @@
     mode: "0640"
     owner: root
   register: __environs
-  notify: Restart Docker Compose environments
+  notify: Restart Docker Compose services
   with_items: "{{ docker_compose_services }}"
   when:
     - item.environment is defined
