@@ -55,7 +55,6 @@
   ansible.builtin.copy:
     content: |
       ---
-      version: '3.8'
 
       services:
         {{ item.services | to_yaml(indent=2, default_flow_style=False) | indent(2) }}
