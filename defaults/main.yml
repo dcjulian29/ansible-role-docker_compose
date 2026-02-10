@@ -1,7 +1,7 @@
 ---
 __base_url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}"
-docker_compose_version: 5.0.0
-docker_compose_url: "{{ __base_url }}/docker-compose-linux-{{ ansible_architecture }}"
+docker_compose_version: 5.0.2
+docker_compose_url: "{{ __base_url }}/docker-compose-linux-{{ ansible_facts['architecture'] }}"
 docker_compose_path: /usr/local/bin/docker-compose
 docker_compose_base_dir: /opt/compose
 docker_compose_config_dir: "{{ docker_compose_base_dir }}"
