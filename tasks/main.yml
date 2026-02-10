@@ -1,34 +1,14 @@
 ---
-- name: Check current docker-compose version
-  ansible.builtin.command: "{{ docker_compose_path }} --version"
-  register: dc_vsn
-  check_mode: false
-  changed_when: false
-  failed_when: false
+- name: Include v1 docker-compose tasks
+  ansible.builtin.include_tasks: v1.yml
+  when: not docker_compose_v2
 
-- name: Set docker-compose version if installed
-  ansible.builtin.set_fact:
-    docker_compose_current_version: >
-      "{{ dc_vsn.stdout | regex_search('(\d+(\.\d+)+)') }}"
-  when: dc_vsn.stdout is defined and (dc_vsn.stdout | length > 0)
-
-- name: Remove existing docker-compose version if it's different
-  ansible.builtin.file:
-    path: "{{ docker_compose_path }}"
-    state: absent
-  when: >
-    docker_compose_current_version is defined
-    and docker_compose_version not in docker_compose_current_version
-
-- name: Ensure Docker Compose is installed
-  ansible.builtin.get_url:
-    url: "{{ docker_compose_url }}"
-    dest: "{{ docker_compose_path }}"
-    mode: "0755"
-  when: >
-    (docker_compose_current_version is not defined)
-    or (docker_compose_current_version | length == 0)
-    or docker_compose_version not in docker_compose_current_version
+- name: Install Docker Compose v2 plugin
+  ansible.builtin.package:
+    name:
+      - docker-compose-plugin
+    state: "{{ 'latest' }}"
+  when: docker_compose_v2
 
 - name: Ensure docker compose folders exists
   ansible.builtin.file:
@@ -104,6 +84,16 @@
     - item.environment is defined
     - item.environment | length > 0
 
+- name: Set Docker Compose execuable to v1
+  ansible.builtin.set_fact:
+    dc_exe: /usr/local/bin/docker-compose
+  when: not docker_compose_v2
+
+- name: Set Docker Compose execuable to v2
+  ansible.builtin.set_fact:
+    dc_exe: "/usr/bin/docker compose"
+  when: docker_compose_v2
+
 - name: Ensure docker compose systemd service configured
   ansible.builtin.copy:
     content: |
@@ -115,8 +105,8 @@
 
       [Service]
       WorkingDirectory={{ docker_compose_config_dir }}/{{ item.name }}
-      ExecStart=/usr/local/bin/docker-compose up
-      ExecStop=/usr/local/bin/docker-compose down
+      ExecStart={{ dc_exe }} up
+      ExecStop={{ dc_exe }} down
       TimeoutStartSec=0
       Restart=on-failure
       StartLimitBurst=3
